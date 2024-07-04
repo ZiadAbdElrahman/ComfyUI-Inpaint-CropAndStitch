@@ -27,6 +27,12 @@ function inpaintCropAndStitchHandler(node) {
             toggleWidget(node, findWidgetByName(node, "force_width"), true);
             toggleWidget(node, findWidgetByName(node, "force_height"), true);
         }
+        else if (findWidgetByName(node, "mode").value == "scaled free size") {
+            toggleWidget(node, findWidgetByName(node, "rescale_factor"), true);
+            toggleWidget(node, findWidgetByName(node, "max_width"), true);
+            toggleWidget(node, findWidgetByName(node, "max_height"), true);
+            toggleWidget(node, findWidgetByName(node, "padding"), true);
+        }
     } else if (node.comfyClass == "InpaintExtendOutpaint") {
         toggleWidget(node, findWidgetByName(node, "expand_up_pixels"));
         toggleWidget(node, findWidgetByName(node, "expand_up_factor"));

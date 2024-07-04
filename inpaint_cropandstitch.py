@@ -39,15 +39,15 @@ class InpaintCrop:
                 "invert_mask": ("BOOLEAN", {"default": False}),
                 "blend_pixels": ("FLOAT", {"default": 16.0, "min": 0.0, "max": 32.0, "step": 0.1}),
                 "rescale_algorithm": (["nearest", "bilinear", "bicubic", "bislerp"], {"default": "bicubic"}),
-                "mode": (["ranged size", "forced size", "free size"], {"default": "ranged size"}),
+                "mode": (["ranged size", "forced size", "free size", "scaled free size"], {"default": "ranged size"}),
                 "force_width": ("INT", {"default": 1024, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # force
                 "force_height": ("INT", {"default": 1024, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # force
-                "rescale_factor": ("FLOAT", {"default": 1.00, "min": 0.01, "max": 100.0, "step": 0.01}), # free
-                "min_width": ("INT", {"default": 512, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # ranged
-                "min_height": ("INT", {"default": 512, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # ranged
-                "max_width": ("INT", {"default": 768, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # ranged
-                "max_height": ("INT", {"default": 768, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # ranged
-                "padding": ([8, 16, 32, 64, 128, 256, 512], {"default": 32}), # free and ranged
+                "rescale_factor": ("FLOAT", {"default": 1.00, "min": 0.01, "max": 100.0, "step": 0.01}), # free and scaled
+                "min_width": ("INT", {"default": 512, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # ranged and scaled
+                "min_height": ("INT", {"default": 512, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # ranged and scaled
+                "max_width": ("INT", {"default": 768, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # ranged and scaled
+                "max_height": ("INT", {"default": 768, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}), # ranged and scaled
+                "padding": ([8, 16, 32, 64, 128, 256, 512], {"default": 32}), # free and ranged and scaled
            },
            "optional": {
                 "optional_context_mask": ("MASK",),
@@ -323,15 +323,29 @@ class InpaintCrop:
         # Grow context area if requested
         y_size = y_max - y_min + 1
         x_size = x_max - x_min + 1
+        
+        
         y_grow = round(max(y_size*(context_expand_factor-1), context_expand_pixels, blend_pixels**1.5))
         x_grow = round(max(x_size*(context_expand_factor-1), context_expand_pixels, blend_pixels**1.5))
+        
         y_min = max(y_min - y_grow // 2, 0)
         y_max = min(y_max + y_grow // 2, height - 1)
         x_min = max(x_min - x_grow // 2, 0)
         x_max = min(x_max + x_grow // 2, width - 1)
         y_size = y_max - y_min + 1
         x_size = x_max - x_min + 1
-
+        
+        if mode == 'scaled free size':
+            real_x_min, real_y_min = (original_width-initial_width)//2, (original_height-initial_height)//2
+            real_x_max, real_y_max = real_x_min + initial_width, real_y_min + initial_height
+            x_min = max(x_min, real_x_min)
+            x_max = min(x_max, real_x_max)
+            y_min = max(y_min, real_y_min)
+            y_max = min(y_max, real_y_max)
+            y_size = y_max - y_min + 1
+            x_size = x_max - x_min + 1
+        
+        
         effective_upscale_factor_x = 1.0
         effective_upscale_factor_y = 1.0
 
@@ -341,7 +355,26 @@ class InpaintCrop:
             min_width = max_width = force_width
             min_height = max_height = force_height
 
-        if mode == 'ranged size' or mode == 'forced size':
+        if mode == 'scaled free size':
+            #Sub case of ranged size.
+            current_width = x_max - x_min + 1
+            current_height = y_max - y_min + 1
+            if current_height > current_width:
+                min_height = max_height = max_height
+                current_aspect_ratio = current_width / current_height                
+                current_aspect_ratio = 0.65 if current_aspect_ratio < 0.65 else current_aspect_ratio
+                
+                min_width = max_width = int(current_aspect_ratio * max_height)
+            elif current_height < current_width:
+                min_width = max_width = max_width
+                current_aspect_ratio = current_height / current_width                
+                current_aspect_ratio = 0.65 if current_aspect_ratio < 0.65 else current_aspect_ratio
+                min_height = max_height = int(current_aspect_ratio * max_width)
+            else:
+                min_width = max_width = max_width
+                min_height = max_height = max_height
+                
+        if mode == 'ranged size' or mode == 'forced size' or mode == 'scaled free size':
             assert max_width >= min_width, "max_width must be greater than or equal to min_width"
             assert max_height >= min_height, "max_height must be greater than or equal to min_height"
             # Ensure we set an aspect ratio supported by min_width, max_width, min_height, max_height
